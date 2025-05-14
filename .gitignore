@@ -7,8 +7,8 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,jupyternotebooks
 
 ### JupyterNotebooks ###
-*.ipynb
-notebooks/*.ipynb
+# *.ipynb
+# notebooks/*.ipynb
 # gitignore template for Jupyter Notebooks
 # website: http://jupyter.org/
 
