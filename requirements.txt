@@ -9,3 +9,4 @@ wandb>=0.13.0
 numpy>=1.22.0
 matplotlib>=3.5.0
 cftime
+nc-time-axis>=1.4.1
