@@ -3,6 +3,7 @@ import torch.nn as nn
 from omegaconf import DictConfig
 from .model.simple_cnn import SimpleCNN
 from .model.vision_transformer import Transformer
+from .model.lstm import ConvLSTMForecast
 
 
 def get_model(cfg: DictConfig):
@@ -21,6 +22,15 @@ def get_model(cfg: DictConfig):
             depth=cfg.model.depth,
             num_heads=cfg.model.num_heads,
             img_size=(48, 72),
+        )
+    elif cfg.model.type == "lstm":
+        model = ConvLSTMForecast(
+            n_input_channels=len(cfg.data.input_vars),
+            n_output_channels=len(cfg.data.output_vars),
+            hidden_channels=cfg.model.hidden_channels, 
+            kernel_size=cfg.model.kernel_size,
+            num_layers=cfg.model.num_layers,
+            output_vars=cfg.data.output_vars
         )
     else:
         raise ValueError(f"Unknown model type: {cfg.model.type}")
