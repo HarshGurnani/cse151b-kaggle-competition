@@ -1,4 +1,6 @@
+import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from omegaconf import DictConfig
 
 
@@ -26,6 +28,12 @@ class ResidualBlock(nn.Module):
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size, padding=kernel_size // 2)
         self.bn2 = nn.BatchNorm2d(out_channels)
 
+        self.conv3 = nn.Conv2d(out_channels, out_channels, kernel_size, padding=kernel_size // 2)
+        self.bn3 = nn.BatchNorm2d(out_channels)
+
+        self.conv4 = nn.Conv2d(out_channels, out_channels, kernel_size, padding=kernel_size // 2)
+        self.bn4 = nn.BatchNorm2d(out_channels)
+
         # Skip connection
         self.skip = nn.Sequential()
         if stride != 1 or in_channels != out_channels:
@@ -42,11 +50,21 @@ class ResidualBlock(nn.Module):
 
         out = self.conv2(out)
         out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+        out = self.relu(out)
+
+        out = self.conv4(out)
+        out = self.bn4(out)
+        # out = self.relu(out)
 
         out += self.skip(identity)
         out = self.relu(out)
 
         return out
+
 
 
 class SimpleCNN(nn.Module):
@@ -74,6 +92,8 @@ class SimpleCNN(nn.Module):
 
         for i in range(depth):
             out_dim = current_dim * 2 if i < depth - 1 else current_dim
+            # self.res_blocks.append(BottleneckResidualBlock(current_dim, out_dim, use_se=True))
+
             self.res_blocks.append(ResidualBlock(current_dim, out_dim))
             if i < depth - 1:  # Don't double the final layer
                 current_dim *= 2

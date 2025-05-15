@@ -3,6 +3,8 @@ from datetime import datetime
 
 import dask.array as da
 
+
+
 import hydra
 import lightning.pytorch as pl
 import matplotlib.pyplot as plt
@@ -16,7 +18,6 @@ from lightning.pytorch import LightningDataModule
 from lightning.pytorch.loggers import WandbLogger
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, Dataset
-
 
 
 try:
@@ -324,6 +325,12 @@ class ClimateEmulationModule(pl.LightningModule):
         self.test_step_outputs = []
         self.validation_step_outputs = []
 
+
+        self.train_losses = []
+        self.val_losses = []
+        self.sample_errors = []
+
+
     def forward(self, x):
         return self.model(x)
 
@@ -335,12 +342,16 @@ class ClimateEmulationModule(pl.LightningModule):
         y_pred_norm = self(x)
         loss = self.criterion(y_pred_norm, y_true_norm)
         self.log("train/loss", loss, prog_bar=True, batch_size=x.size(0))
+        
+        self.train_losses.append(loss.item())
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, y_true_norm = batch
         y_pred_norm = self(x)
         loss = self.criterion(y_pred_norm, y_true_norm)
+        
+        self.val_losses.append(loss.item())
         self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=x.size(0), sync_dist=True)
 
         # Save unnormalized outputs for decadal mean/stddev calculation in validation_epoch_end
@@ -349,6 +360,45 @@ class ClimateEmulationModule(pl.LightningModule):
         self.validation_step_outputs.append((y_pred_norm, y_true_norm))
 
         return loss
+
+
+    def on_train_end(self):
+        os.makedirs("outputs/plots", exist_ok=True)
+    
+        # Plot loss curves
+        plt.figure(figsize=(10, 5))
+        plt.plot(self.train_losses, label="Train Loss")
+        plt.plot(
+            range(0, len(self.train_losses), max(1, len(self.train_losses) // len(self.val_losses))),
+            self.val_losses,
+            label="Val Loss"
+        )
+        plt.xlabel("Steps")
+        plt.ylabel("MSE")
+        plt.title("Training and Validation Loss")
+        plt.legend()
+        plt.savefig("outputs/plots/loss_curve.png")
+        plt.close()
+    
+        # Top 3 worst samples
+        worst = sorted(self.sample_errors, key=lambda x: x[3], reverse=True)[:3]
+        for i, (x, y, yhat, err) in enumerate(worst):
+            fig, axs = plt.subplots(1, 3, figsize=(12, 4))
+            for ax, data, title in zip(
+                axs,
+                [x[0], y[0], yhat[0]],  # assume single channel
+                ["Input", "Ground Truth", "Prediction"]
+            ):
+                im = ax.imshow(data.numpy(), cmap="coolwarm")
+                ax.set_title(title)
+                plt.colorbar(im, ax=ax)
+            plt.suptitle(f"Sample {i} - MSE: {err:.4f}")
+            plt.tight_layout()
+            print("here")
+            plt.savefig(f"outputs/plots/worst_sample_{i}.png")
+            plt.close()
+    
+        self.sample_errors.clear()
 
     def _evaluate_predictions(self, predictions, targets, is_test=False):
         """
@@ -515,6 +565,7 @@ class ClimateEmulationModule(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
         return optimizer
+
 
 
 # --- Main Execution with Hydra ---
