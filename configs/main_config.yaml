@@ -2,7 +2,7 @@
 
 defaults:
   - data: default
-  - model: lstm
+  - model: transformer
   - training: default
   - trainer: default
   - _self_

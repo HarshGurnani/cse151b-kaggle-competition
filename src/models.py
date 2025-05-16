@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from omegaconf import DictConfig
 from .model.simple_cnn import SimpleCNN
+from .model.cnn import CNN
 from .model.vision_transformer import Transformer
 from .model.lstm import ConvLSTMForecast
 from .model.mlp import MLP
@@ -14,6 +16,8 @@ def get_model(cfg: DictConfig):
     model_kwargs["n_output_channels"] = len(cfg.data.output_vars)
     if cfg.model.type == "simple_cnn":
         model = SimpleCNN(**model_kwargs)
+    elif cfg.model.type == "cnn":
+        model = CNN(**model_kwargs) 
     elif cfg.model.type == "mlp":
         model = MLP(**model_kwargs)
     elif cfg.model.type == "transformer":
