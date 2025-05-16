@@ -1,0 +1,10 @@
+# @package _global_.model
+
+# Model type identifier
+type: mlp
+
+# Model architecture parameters
+height: 48
+width: 72
+hidden_size: 1024
+dropout: 0.2
