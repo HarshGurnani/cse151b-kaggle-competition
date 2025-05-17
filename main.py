@@ -344,6 +344,15 @@ class ClimateEmulationModule(pl.LightningModule):
         self.log("train/loss", loss, prog_bar=True, batch_size=x.size(0))
         
         self.train_losses.append(loss.item())
+
+        per_sample_loss = ((y_pred_norm - y_true_norm) ** 2).mean(dim=(1, 2, 3))  # shape: (batch_size,)
+        for i in range(len(per_sample_loss)):
+            self.sample_errors.append({
+                "input": x[i].detach().cpu(),
+                "target": y_true_norm[i].detach().cpu(),
+                "prediction": y_pred_norm[i].detach().cpu(),
+                "loss": per_sample_loss[i].item()
+            })
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -363,7 +372,7 @@ class ClimateEmulationModule(pl.LightningModule):
 
 
     def on_train_end(self):
-        os.makedirs("outputs/plots", exist_ok=True)
+        os.makedirs("plots", exist_ok=True)
     
         # Plot loss curves
         plt.figure(figsize=(10, 5))
@@ -377,26 +386,88 @@ class ClimateEmulationModule(pl.LightningModule):
         plt.ylabel("MSE")
         plt.title("Training and Validation Loss")
         plt.legend()
-        plt.savefig("outputs/plots/loss_curve.png")
+        plt.savefig("plots/loss_curve.png")
         plt.close()
+
+        # Identify top 3 samples with highest error
+        top_k = sorted(self.sample_errors, key=lambda x: x["loss"], reverse=True)[:3]
     
-        # Top 3 worst samples
-        worst = sorted(self.sample_errors, key=lambda x: x[3], reverse=True)[:3]
-        for i, (x, y, yhat, err) in enumerate(worst):
-            fig, axs = plt.subplots(1, 3, figsize=(12, 4))
-            for ax, data, title in zip(
-                axs,
-                [x[0], y[0], yhat[0]],  # assume single channel
-                ["Input", "Ground Truth", "Prediction"]
-            ):
-                im = ax.imshow(data.numpy(), cmap="coolwarm")
-                ax.set_title(title)
-                plt.colorbar(im, ax=ax)
-            plt.suptitle(f"Sample {i} - MSE: {err:.4f}")
-            plt.tight_layout()
-            print("here")
-            plt.savefig(f"outputs/plots/worst_sample_{i}.png")
-            plt.close()
+        for idx, sample in enumerate(top_k):
+            input_sample = sample["input"].numpy()
+            pred_sample = sample["prediction"].numpy()
+            target_sample = sample["target"].numpy()
+    
+            # Denormalize predictions and targets
+            pred_sample_denorm = self.normalizer.inverse_transform_output(pred_sample)
+            target_sample_denorm = self.normalizer.inverse_transform_output(target_sample)
+
+            pred_sample_denorm = np.squeeze(pred_sample_denorm, axis=0)
+            target_sample_denorm = np.squeeze(target_sample_denorm, axis=0)
+    
+            # Plot spatial patterns for each output variable
+            num_channels = pred_sample.shape[0]
+            for ch in range(num_channels):
+                fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+                im1 = axs[0].imshow(target_sample_denorm[ch], cmap='viridis')
+                axs[0].set_title(f'Target - Var {ch}')
+                plt.colorbar(im1, ax=axs[0])
+                im2 = axs[1].imshow(pred_sample_denorm[ch], cmap='viridis')
+                axs[1].set_title(f'Prediction - Var {ch}')
+                plt.colorbar(im2, ax=axs[1])
+                plt.suptitle(f"Top-{idx+1} High Loss Sample (Loss={sample['loss']:.4f})")
+                plt.tight_layout()
+                plt.savefig(f"plots/high_loss_sample_{idx+1}_var_{ch}.png")
+                plt.close(fig)
+
+                if input_sample.shape[1:] == target_sample.shape[1:]:
+                    fig, axs = plt.subplots(1, input_sample.shape[0], figsize=(15, 4))
+                    for i in range(input_sample.shape[0]):
+                        axs[i].imshow(input_sample[i], cmap='plasma')
+                        axs[i].set_title(f'Input Var {i}')
+                    plt.suptitle(f"Input Pattern for Sample {idx+1}")
+                    plt.tight_layout()
+                    plt.savefig(f"plots/high_loss_sample_{idx+1}_inputs.png")
+                    plt.close(fig)
+
+        # Identify top 3 samples with lowest error
+        top_k = sorted(self.sample_errors, key=lambda x: x["loss"])[:3]
+    
+        for idx, sample in enumerate(top_k):
+            input_sample = sample["input"].numpy()
+            pred_sample = sample["prediction"].numpy()
+            target_sample = sample["target"].numpy()
+    
+            # Denormalize predictions and targets
+            pred_sample_denorm = self.normalizer.inverse_transform_output(pred_sample)
+            target_sample_denorm = self.normalizer.inverse_transform_output(target_sample)
+
+            pred_sample_denorm = np.squeeze(pred_sample_denorm, axis=0)
+            target_sample_denorm = np.squeeze(target_sample_denorm, axis=0)
+    
+            # Plot spatial patterns for each output variable
+            num_channels = pred_sample.shape[0]
+            for ch in range(num_channels):
+                fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+                im1 = axs[0].imshow(target_sample_denorm[ch], cmap='viridis')
+                axs[0].set_title(f'Target - Var {ch}')
+                plt.colorbar(im1, ax=axs[0])
+                im2 = axs[1].imshow(pred_sample_denorm[ch], cmap='viridis')
+                axs[1].set_title(f'Prediction - Var {ch}')
+                plt.colorbar(im2, ax=axs[1])
+                plt.suptitle(f"Top-{idx+1} Low Loss Sample (Loss={sample['loss']:.4f})")
+                plt.tight_layout()
+                plt.savefig(f"plots/low_loss_sample_{idx+1}_var_{ch}.png")
+                plt.close(fig)
+
+                if input_sample.shape[1:] == target_sample.shape[1:]:
+                    fig, axs = plt.subplots(1, input_sample.shape[0], figsize=(15, 4))
+                    for i in range(input_sample.shape[0]):
+                        axs[i].imshow(input_sample[i], cmap='plasma')
+                        axs[i].set_title(f'Input Var {i}')
+                    plt.suptitle(f"Input Pattern for Sample {idx+1}")
+                    plt.tight_layout()
+                    plt.savefig(f"plots/low_loss_sample_{idx+1}_inputs.png")
+                    plt.close(fig)
     
         self.sample_errors.clear()
 
