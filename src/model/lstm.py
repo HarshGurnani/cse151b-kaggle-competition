@@ -65,9 +65,9 @@ class ConvLSTMForecast(nn.Module):
         self,
         n_input_channels,
         n_output_channels,
-        hidden_channels=[32, 64],
+        hidden_channels=[32, 64, 128],
         kernel_size=3,
-        num_layers=2,
+        num_layers=3,
         output_vars=['tas', 'pr']
     ):
         super().__init__()

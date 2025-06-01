@@ -10,7 +10,7 @@ type: transformer
 dropout_rate: 0.2
 in_channels: 5
 out_channels: 2
-patch_size: 4
+patch_size: 6
 embed_dim: 128
 depth: 6
 num_heads: 8
