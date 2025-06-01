@@ -29,6 +29,7 @@ def get_model(cfg: DictConfig):
             depth=cfg.model.depth,
             num_heads=cfg.model.num_heads,
             img_size=(48, 72),
+            dropout=cfg.model.dropout_rate
         )
     elif cfg.model.type == "lstm":
         model = ConvLSTMForecast(

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from timm.models.vision_transformer import trunc_normal_
 
 class PatchEmbed(nn.Module):
     def __init__(self, in_channels, patch_size, embed_dim):
@@ -24,12 +25,22 @@ class Transformer(nn.Module):
         depth=6,
         num_heads=8,
         img_size=(48, 72),
+        dropout=0.1
     ):
         super().__init__()
+        self.stem = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(in_channels),
+            nn.ReLU(inplace=True),
+        )
+        
         self.patch_embed = PatchEmbed(in_channels, patch_size, embed_dim)
         num_patches = (img_size[0] // patch_size) * (img_size[1] // patch_size)
 
+        self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim))
         self.pos_embed = nn.Parameter(torch.randn(1, num_patches + 1, embed_dim))
+        trunc_normal_(self.pos_embed, std=.02)
+        self.dropout = nn.Dropout(dropout)
 
         encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=num_heads, batch_first=True)
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=depth)
@@ -47,11 +58,18 @@ class Transformer(nn.Module):
 
     def forward(self, x):
         B, C, H, W = x.shape
+
+        x = self.stem(x)
         x = self.patch_embed(x)  # (B, num_patches, embed_dim)
 
+        cls_tokens = self.cls_token.expand(B, -1, -1)
+        x = torch.cat((cls_tokens, x), dim=1)
         x = x + self.pos_embed[:, :x.size(1)]
+        x = self.dropout(x)
 
         x = self.transformer(x)  # (B, num_patches + 1, embed_dim)
+        x = x[:, 1:]
+        # cls_output = x[:, 0]
 
         # Project each patch to (patch_area * output_channels)
         x = self.head(x)  # (B, num_patches, patch_area * output_channels)
