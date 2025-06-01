@@ -6,6 +6,7 @@ from .model.vision_transformer import Transformer
 from .model.lstm import ConvLSTMForecast
 from .model.mlp import MLP
 from .model.ensemble import EnsembleModel
+from .model.cnn import CNN
 
 def get_model(cfg: DictConfig):
     # Create model based on configuration
@@ -66,7 +67,7 @@ def get_model(cfg: DictConfig):
             dropout_rate=transformer_cfg.dropout_rate
         )
     
-        cnn = SimpleCNN(
+        cnn = CNN(
             n_input_channels=cnn_cfg.n_input_channels,
             n_output_channels=cnn_cfg.n_output_channels,
             kernel_size=cnn_cfg.kernel_size,
