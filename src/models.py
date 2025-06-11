@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from omegaconf import DictConfig
 from .model.simple_cnn import SimpleCNN
+from .model.cnn import CNN
 from .model.vision_transformer import Transformer
 from .model.lstm import ConvLSTMForecast
 from .model.mlp import MLP
@@ -16,7 +18,8 @@ def get_model(cfg: DictConfig):
 
     if cfg.model.type == "simple_cnn":
         model = SimpleCNN(**model_kwargs)
-
+    elif cfg.model.type == "cnn":
+        model = CNN(**model_kwargs) 
     elif cfg.model.type == "mlp":
         model = MLP(**model_kwargs)
 
@@ -29,6 +32,7 @@ def get_model(cfg: DictConfig):
             depth=cfg.model.depth,
             num_heads=cfg.model.num_heads,
             img_size=(48, 72),
+            dropout=cfg.model.dropout_rate
         )
 
     elif cfg.model.type == "lstm":

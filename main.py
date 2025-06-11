@@ -3,6 +3,8 @@ from datetime import datetime
 
 import dask.array as da
 
+
+
 import hydra
 import lightning.pytorch as pl
 import matplotlib.pyplot as plt
@@ -16,7 +18,6 @@ from lightning.pytorch import LightningDataModule
 from lightning.pytorch.loggers import WandbLogger
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, Dataset
-
 
 
 try:
@@ -324,6 +325,12 @@ class ClimateEmulationModule(pl.LightningModule):
         self.test_step_outputs = []
         self.validation_step_outputs = []
 
+
+        self.train_losses = []
+        self.val_losses = []
+        self.sample_errors = []
+
+
     def forward(self, x):
         return self.model(x)
 
@@ -335,12 +342,25 @@ class ClimateEmulationModule(pl.LightningModule):
         y_pred_norm = self(x)
         loss = self.criterion(y_pred_norm, y_true_norm)
         self.log("train/loss", loss, prog_bar=True, batch_size=x.size(0))
+        
+        self.train_losses.append(loss.item())
+
+        per_sample_loss = ((y_pred_norm - y_true_norm) ** 2).mean(dim=(1, 2, 3))  # shape: (batch_size,)
+        for i in range(len(per_sample_loss)):
+            self.sample_errors.append({
+                "input": x[i].detach().cpu(),
+                "target": y_true_norm[i].detach().cpu(),
+                "prediction": y_pred_norm[i].detach().cpu(),
+                "loss": per_sample_loss[i].item()
+            })
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, y_true_norm = batch
         y_pred_norm = self(x)
         loss = self.criterion(y_pred_norm, y_true_norm)
+        
+        self.val_losses.append(loss.item())
         self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=x.size(0), sync_dist=True)
 
         # Save unnormalized outputs for decadal mean/stddev calculation in validation_epoch_end
@@ -349,6 +369,107 @@ class ClimateEmulationModule(pl.LightningModule):
         self.validation_step_outputs.append((y_pred_norm, y_true_norm))
 
         return loss
+
+
+    def on_train_end(self):
+        os.makedirs("plots", exist_ok=True)
+    
+        # Plot loss curves
+        plt.figure(figsize=(10, 5))
+        plt.plot(self.train_losses, label="Train Loss")
+        plt.plot(
+            range(0, len(self.train_losses), max(1, len(self.train_losses) // len(self.val_losses))),
+            self.val_losses,
+            label="Val Loss"
+        )
+        plt.xlabel("Steps")
+        plt.ylabel("MSE")
+        plt.title("Training and Validation Loss")
+        plt.legend()
+        plt.savefig("plots/loss_curve.png")
+        plt.close()
+
+        # Identify top 3 samples with highest error
+        top_k = sorted(self.sample_errors, key=lambda x: x["loss"], reverse=True)[:3]
+    
+        for idx, sample in enumerate(top_k):
+            input_sample = sample["input"].numpy()
+            pred_sample = sample["prediction"].numpy()
+            target_sample = sample["target"].numpy()
+    
+            # Denormalize predictions and targets
+            pred_sample_denorm = self.normalizer.inverse_transform_output(pred_sample)
+            target_sample_denorm = self.normalizer.inverse_transform_output(target_sample)
+
+            pred_sample_denorm = np.squeeze(pred_sample_denorm, axis=0)
+            target_sample_denorm = np.squeeze(target_sample_denorm, axis=0)
+    
+            # Plot spatial patterns for each output variable
+            num_channels = pred_sample.shape[0]
+            for ch in range(num_channels):
+                fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+                im1 = axs[0].imshow(target_sample_denorm[ch], cmap='viridis')
+                axs[0].set_title(f'Target - Var {ch}')
+                plt.colorbar(im1, ax=axs[0])
+                im2 = axs[1].imshow(pred_sample_denorm[ch], cmap='viridis')
+                axs[1].set_title(f'Prediction - Var {ch}')
+                plt.colorbar(im2, ax=axs[1])
+                plt.suptitle(f"Top-{idx+1} High Loss Sample (Loss={sample['loss']:.4f})")
+                plt.tight_layout()
+                plt.savefig(f"plots/high_loss_sample_{idx+1}_var_{ch}.png")
+                plt.close(fig)
+
+                if input_sample.shape[1:] == target_sample.shape[1:]:
+                    fig, axs = plt.subplots(1, input_sample.shape[0], figsize=(15, 4))
+                    for i in range(input_sample.shape[0]):
+                        axs[i].imshow(input_sample[i], cmap='plasma')
+                        axs[i].set_title(f'Input Var {i}')
+                    plt.suptitle(f"Input Pattern for Sample {idx+1}")
+                    plt.tight_layout()
+                    plt.savefig(f"plots/high_loss_sample_{idx+1}_inputs.png")
+                    plt.close(fig)
+
+        # Identify top 3 samples with lowest error
+        top_k = sorted(self.sample_errors, key=lambda x: x["loss"])[:3]
+    
+        for idx, sample in enumerate(top_k):
+            input_sample = sample["input"].numpy()
+            pred_sample = sample["prediction"].numpy()
+            target_sample = sample["target"].numpy()
+    
+            # Denormalize predictions and targets
+            pred_sample_denorm = self.normalizer.inverse_transform_output(pred_sample)
+            target_sample_denorm = self.normalizer.inverse_transform_output(target_sample)
+
+            pred_sample_denorm = np.squeeze(pred_sample_denorm, axis=0)
+            target_sample_denorm = np.squeeze(target_sample_denorm, axis=0)
+    
+            # Plot spatial patterns for each output variable
+            num_channels = pred_sample.shape[0]
+            for ch in range(num_channels):
+                fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+                im1 = axs[0].imshow(target_sample_denorm[ch], cmap='viridis')
+                axs[0].set_title(f'Target - Var {ch}')
+                plt.colorbar(im1, ax=axs[0])
+                im2 = axs[1].imshow(pred_sample_denorm[ch], cmap='viridis')
+                axs[1].set_title(f'Prediction - Var {ch}')
+                plt.colorbar(im2, ax=axs[1])
+                plt.suptitle(f"Top-{idx+1} Low Loss Sample (Loss={sample['loss']:.4f})")
+                plt.tight_layout()
+                plt.savefig(f"plots/low_loss_sample_{idx+1}_var_{ch}.png")
+                plt.close(fig)
+
+                if input_sample.shape[1:] == target_sample.shape[1:]:
+                    fig, axs = plt.subplots(1, input_sample.shape[0], figsize=(15, 4))
+                    for i in range(input_sample.shape[0]):
+                        axs[i].imshow(input_sample[i], cmap='plasma')
+                        axs[i].set_title(f'Input Var {i}')
+                    plt.suptitle(f"Input Pattern for Sample {idx+1}")
+                    plt.tight_layout()
+                    plt.savefig(f"plots/low_loss_sample_{idx+1}_inputs.png")
+                    plt.close(fig)
+    
+        self.sample_errors.clear()
 
     def _evaluate_predictions(self, predictions, targets, is_test=False):
         """
@@ -515,6 +636,7 @@ class ClimateEmulationModule(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
         return optimizer
+
 
 
 # --- Main Execution with Hydra ---
