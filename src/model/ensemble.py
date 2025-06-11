@@ -42,22 +42,25 @@ class EnsembleModel(nn.Module):
             raise ValueError(f"x_img must be 4D, got shape: {x_img.shape}")
 
         # Get outputs
-        out_lstm = self.convlstm(x_seq)       # (B, 2, H, W)
+        # out_lstm = self.convlstm(x_seq)       # (B, 2, H, W)
         out_trans = self.transformer(x_img)   # (B, 2, H, W)
-        out_cnn = self.cnn(x_img)             # (B, 2, H, W)
+        # out_cnn = self.cnn(x_img)             # (B, 2, H, W)
 
         # Split channels
-        tas = (
-            self.weights_tas[0] * out_lstm[:, 0] +
-            self.weights_tas[1] * out_trans[:, 0] +
-            self.weights_tas[2] * out_cnn[:, 0]
-        ) / sum(self.weights_tas)
+        # tas = (
+        #     self.weights_tas[0] * out_lstm[:, 0] +
+        #     self.weights_tas[1] * out_trans[:, 0] +
+        #     self.weights_tas[2] * out_cnn[:, 0]
+        # ) / sum(self.weights_tas)
 
-        pr = (
-            self.weights_pr[0] * out_lstm[:, 1] +
-            self.weights_pr[1] * out_trans[:, 1] +
-            self.weights_pr[2] * out_cnn[:, 1]
-        ) / sum(self.weights_pr)
+        # pr = (
+        #     self.weights_pr[0] * out_lstm[:, 1] +
+        #     self.weights_pr[1] * out_trans[:, 1] +
+        #     self.weights_pr[2] * out_cnn[:, 1]
+        # ) / sum(self.weights_pr)
+
+        tas = self.weights_tas[1] * out_trans[:, 0]
+        pr = self.weights_pr[1] * out_trans[:, 1]
 
         # Stack back to (B, 2, H, W)
         ensemble_out = torch.stack([tas, pr], dim=1)

@@ -64,7 +64,7 @@ def get_model(cfg: DictConfig):
             depth=transformer_cfg.depth,
             num_heads=transformer_cfg.num_heads,
             img_size=tuple(transformer_cfg.img_size),
-            dropout_rate=transformer_cfg.dropout_rate
+            dropout=transformer_cfg.dropout_rate
         )
     
         cnn = CNN(
