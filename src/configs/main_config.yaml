@@ -2,7 +2,7 @@
 
 defaults:
   - data: default
-  - model: simple_cnn
+  - model: ensemble
   - training: default
   - trainer: default
   - _self_

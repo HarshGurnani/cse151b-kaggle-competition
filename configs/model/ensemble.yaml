@@ -1,0 +1,34 @@
+# @package _global_.model
+
+type: ensemble
+
+submodels:
+  - type: lstm
+    in_channels: 5
+    out_channels: 2
+    hidden_channels: [32, 64, 128]
+    kernel_size: 5
+    num_layers: 3
+
+  - type: transformer
+    in_channels: 5
+    output_channels: 2
+    patch_size: 6
+    embed_dim: 128
+    depth: 6
+    num_heads: 8
+    img_size: [48, 72]
+    dropout_rate: 0.2 
+
+  - type: cnn
+    n_input_channels: 5
+    n_output_channels: 2
+    kernel_size: 3
+    init_dim: 64
+    depth: 4
+    dropout_rate: 0.2
+    
+# weights in order of LSTM, Tranformer, CNN
+weights_tas: [0.0, 1.0, 0.0]
+weights_pr:  [0.0, 1.0, 0.0]
+output_vars: ["tas", "pr"]

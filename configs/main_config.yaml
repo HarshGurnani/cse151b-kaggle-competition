@@ -2,7 +2,7 @@
 
 defaults:
   - data: default
-  - model: transformer
+  - model: ensemble
   - training: default
   - trainer: default
   - _self_
